@@ -41,14 +41,22 @@ struct HomeView: View {
             }
             .navigationTitle("Games")
             .onAppear {
-                vM.fetch()
+                Task {
+                    await vM.fetch()
+                }
             }
             .searchable(text: $searchQuery)
             .onChange(of: searchQuery) { query in
-                if query.isEmpty && !isSearching {
-                    vM.fetch()
+                if query.isEmpty && !isSearching && vM.isSearching {
+                    Task {
+                        vM.stopSearching()
+                        await vM.fetch()
+                    }
                 } else {
-                    vM.search(with: query)
+                    Task {
+                        vM.startSearching()
+                        await vM.search(with: query)
+                    }
                 }
             }
             

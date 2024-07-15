@@ -22,3 +22,13 @@ func CreateRequestHeader(path URLEnding: String, preferences bodyParams: String)
     
     return requestHeader
 }
+
+func MakeHTTPRequest<T: Codable>(with requestHeader: URLRequest, as type: T.Type) async throws -> T {
+    // make HTTP request
+    let (data, _) = try await URLSession.shared.data(for: requestHeader)
+    
+    // decode the data
+    let decode = try JSONDecoder().decode(T.self, from: data)
+    
+    return decode
+}

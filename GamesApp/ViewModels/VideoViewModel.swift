@@ -7,31 +7,49 @@
 
 import SwiftUI
 
-struct VideoObject: Hashable, Codable {
+struct VideoQuery: Hashable, Codable {
     let game: Int
     let video_id: String
 }
 
+struct WebsiteQuery: Hashable, Codable {
+    let url: String
+    let trusted: Bool
+    let category: Int
+    let game: Int
+}
+
+struct ResultWebsiteObject: Hashable, Codable {
+    let name: String
+    let result: [WebsiteQuery]
+}
+
+struct ResultVideoObject: Hashable, Codable {
+    let name: String
+    let result: [VideoQuery]
+}
+
+enum WebsiteCategory: Int {
+    case IPhone = 10, IPad = 11, Android = 12, Steam = 13, Itch = 15, Epic = 16, GOG = 17
+}
+
 class VideoViewModel: ObservableObject {
-    @Published var videos: [VideoObject] = []
+    @Published var videos: [ResultVideoObject] = []
+    @Published var websites: [ResultWebsiteObject] = []
     
     func fetch(id gameId: Int) {
         let preferences = "f game,video_id;l 1;w game =\(gameId);"
-        let requestHeader = CreateRequestHeader(path: "game_videos", preferences: preferences)
+        let multiquery = """
+        query game_videos "Video" {
+            f game,video_id;
+            w game =\(gameId);
+        };
+        query websites "Website" {
+            f url,category,trusted,game;
+            w trusted = true & game =\(gameId) & category = (10,11,12,13,15,16,17);
+        };
+        """
         
-        let task = URLSession.shared.dataTask(with: requestHeader) { [weak self] data, _, error in
-            guard let data = data, error == nil else { return }
-            
-            do {
-                let videos = try JSONDecoder().decode([VideoObject].self, from: data)
-                DispatchQueue.main.async {
-                    self?.videos = videos
-                }
-            } catch {
-                print(error)
-            }
-        }
         
-        task.resume()
     }
 }

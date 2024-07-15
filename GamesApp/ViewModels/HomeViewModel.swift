@@ -42,84 +42,66 @@ struct CreatePlaceHolder {
 
 class HomeViewModel: ObservableObject {
     @Published var games: [CoverObject] = []
+    @Published var isSearching: Bool = false
     
-    func fetch() {
+    func toggleSearching() { self.isSearching = !self.isSearching }
+    func startSearching() { self.isSearching = true }
+    func stopSearching() { self.isSearching = false }
+    
+    func fetch() async {
         let preferences = "f url,game.name,game.hypes,game.follows,game.storyline,game.url; w url !=n & game.follows !=n & game.storyline !=n & game.url !=n & game.hypes >= 100; l 20;"
         let requestHeader = CreateRequestHeader(path: "covers", preferences: preferences)
         
-        let task = URLSession.shared.dataTask(with: requestHeader) { [weak self] data, _, error in
-            guard let data = data, error == nil else { return }
-            
-            do {
-                let games = try JSONDecoder().decode([CoverObject].self, from: data)
-                DispatchQueue.main.async {
-                    self?.games = games
-                }
-            } catch {
-                print(error)
-            }
-        }
+        let data = try? await MakeHTTPRequest(with: requestHeader, as: [CoverObject].self)
         
-        task.resume()
+        DispatchQueue.main.async {
+            self.games = data!
+        }
     }
     
-    func search(with searchQuery: String) {
+    func search(with searchQuery: String) async {
         
         // search for the games
         let searchPreferences = "f name,hypes,follows,cover,url,storyline,summary; w cover !=n & url !=n; search \"\(searchQuery)\";"
         let searchRequestHeader = CreateRequestHeader(path: "games", preferences: searchPreferences)
-        let searchTask = URLSession.shared.dataTask(with: searchRequestHeader) { [weak self] data, _, error in
-            guard let data = data, error == nil else { return }
+        
+        let gameData = try? await MakeHTTPRequest(with: searchRequestHeader, as: [Game].self)
+        
+        if !gameData!.isEmpty {
+            // create a preference string with requests for all the games covers
+            let coverPreferences = gameData!.map({ game in
+                return CreateMultiTaskPreference(with: game)
+            }).joined()
+            let coverRequestHeaders = CreateRequestHeader(path: "multiquery", preferences: coverPreferences)
             
-            do {
-                let games = try JSONDecoder().decode([Game].self, from: data)
-                DispatchQueue.main.async {
-                    if (!games.isEmpty) {
-                        // get the covers of the found games
-                        let coverPreferences = """
-                        \(games.map({ game in
-                            return """
-                            query covers "\(game.name)" {
-                                f url;
-                                w id = \(String(game.cover ?? 0));
-                            };
-                            """
-                        }).joined())
-                        """
-                        
-                        let coverRequestHeaders = CreateRequestHeader(path: "multiquery", preferences: coverPreferences)
-                        
-                        let coverTask = URLSession.shared.dataTask(with: coverRequestHeaders) { data, _, error in
-                            guard let data = data, error == nil else { return }
-                            
-                            do {
-                                var covers: [CoverObject] = []
-                                
-                                let gatheredCovers = try JSONDecoder().decode([CoverQuery].self, from: data)
-                                DispatchQueue.main.async {
-                                    gatheredCovers.forEach { cover in
-                                        let filteredGames = games.filter { game in
-                                            game.name == cover.name
-                                        }
-                                        
-                                        let nest = CoverObject(id: cover.result.first?.id ?? 0, game: filteredGames.first ?? CreatePlaceHolder().game, url: cover.result.first?.url ?? "")
-                                        
-                                        covers.append(nest)
-                                    }
-                                    self?.games = covers
-                                }
-                            } catch {
-                                print(error)
-                            }
-                            
-                        }
-                        coverTask.resume()
-                    }
+            // get game covers
+            let coverData = try? await MakeHTTPRequest(with: coverRequestHeaders, as: [CoverQuery].self)
+            
+            var covers: [CoverObject] = []
+            
+            coverData!.forEach { cover in
+                let filteredGames = gameData!.filter { game in
+                    return game.name == cover.name
                 }
-            } catch {
-                print(error)
+                
+                let nest = CoverObject(id: cover.result.first?.id ?? 0, game: filteredGames.first ?? CreatePlaceHolder().game, url: cover.result.first?.url ?? "")
+                
+                covers.append(nest)
+            }
+            
+            print(self.isSearching)
+            if self.isSearching {
+                self.games = covers
             }
         }
-        searchTask.resume()
     }
+}
+
+private func CreateMultiTaskPreference(with game: Game) -> String {
+    return """
+    query covers "\(game.name)" {
+        f url;
+        w id = \(String(game.cover ?? 0));
+    };
+    """
 }

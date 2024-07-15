@@ -1,0 +1,12 @@
+//
+//  Config.xcconfig
+//  GamesApp
+//
+//  Created by Alp on 20.04.2023.
+//
+
+// Configuration settings file format documentation can be found at:
+// https://help.apple.com/xcode/#/dev745c5c974
+
+CLIENT_ID = kj6x2nmthuf1zhysrg6gxqzvpc12a5
+ACCESS_TOKEN = y0ia0yvquqgtj9am8dgaxd97tmgq17
